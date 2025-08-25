@@ -47,6 +47,11 @@ RUN apt-get update && apt-get install -y \
  rsync \
  xvfb \
  x11-utils \
+ qtbase5-dev \
+ libqt5gui5 \
+ libqt5core5a \
+ libqt5widgets5 \
+ python3-pyqt5 \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -71,7 +76,7 @@ SHELL ["conda", "run", "-n", "wildwing", "/bin/bash", "-c"]
 ENV LD_LIBRARY_PATH=/opt/conda/envs/wildwing/lib/python3.11/site-packages/olympe_deps:/usr/local/lib:$LD_LIBRARY_PATH
 ENV PYTHONPATH=/app:$PYTHONPATH
 ENV DISPLAY=:99
-ENV QT_QPA_PLATFORM=offscreen
+ENV QT_QPA_PLATFORM=xcb
 
 # Create user first
 RUN useradd -m -u 1000 droneuser
