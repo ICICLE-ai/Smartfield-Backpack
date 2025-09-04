@@ -157,17 +157,17 @@ def get_next_action(frame, model, directory, frame_counter):
     # save the frame with bounding boxes
     results[0].save(directory + '/' + str(frame_counter) + '.jpg')
 
-    if count == 0:
-        # no animals detected, continue mission"
-        print("No animals detected")
-        x =  x_dist_no_subject # move forward
-        y = 0 # no movement in y-axis
-        z = 0 # no movement in z-axis
-        return x, y, z
-    else:
-        # animals detected, determine where to move
-        x, y, z, = auto_navigation(results)
-        return x, y, z
+    # if count == 0:
+    #     # no animals detected, continue mission"
+    #     print("No animals detected")
+    #     x =  x_dist_no_subject # move forward
+    #     y = 0 # no movement in y-axis
+    #     z = 0 # no movement in z-axis
+    #     return x, y, z
+    # else:
+    #     # animals detected, determine where to move
+    x, y, z, = auto_navigation(results)
+    return x, y, z
 
 def main(image_path, directory):
     # Get the frame from the drone video
