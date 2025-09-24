@@ -136,7 +136,7 @@ async def execute_pipeline() -> bool:
         # pipeline flow
         flow: List[Tuple[str, str, Optional[str]]] = [
             # ("openpasslite", "/start_mission", "LTT"),
-            ("wildwings", "/start", None),
+            ("wildwings", "/start_mission", None),
             # ("openpasslite", "/start_mission", "RTB")
         ]
         

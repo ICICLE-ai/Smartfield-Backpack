@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   openpasslite:
@@ -60,6 +59,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     environment:
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
       - DISPLAY=${DISPLAY:-:0}
       - CONDA_DEFAULT_ENV=wildwing
     devices:
