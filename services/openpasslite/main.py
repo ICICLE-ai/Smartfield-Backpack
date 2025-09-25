@@ -63,7 +63,6 @@ async def lifespan(app: FastAPI):
     logger.info("OpenPassLite service starting up")
     yield
     logger.info("OpenPassLite service shutting down")
-    # Ensure any running mission is stopped on shutdown
     global mission_thread, stop_mission_flag
     if mission_thread and mission_thread.is_alive():
         logger.info("Stopping running mission during shutdown")
@@ -77,7 +76,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[openpasslite_config["cors_origin"]],
@@ -171,7 +169,6 @@ async def get_logs(lines: int = 100):
     logger.info(f"Logs endpoint accessed - requesting {lines} lines")
     
     try:
-        # Read from the log file configured in config.toml
         log_file_path = openpasslite_config["logfile_path"]
         logger.info(f"Reading logs from: {log_file_path}")
         
@@ -182,10 +179,8 @@ async def get_logs(lines: int = 100):
         with open(log_file_path, 'r') as f:
             all_lines = f.readlines()
         
-        # Get the last 'lines' number of lines
         recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
         
-        # Clean up the lines and return as list
         logs = [line.strip() for line in recent_lines if line.strip()]
         
         logger.info(f"Returning {len(logs)} log lines")
