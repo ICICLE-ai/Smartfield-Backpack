@@ -62,7 +62,7 @@ def on_message(client, userdata, msg):
         camid = mapping["camid"]
 
         SMARTFIELD_URL = get_services()["smartfield"]
-        SMARTFIELDS_API = f"http://{SMARTFIELD_URL}/initiate_process"
+        SMARTFIELDS_API = f"http://{SMARTFIELD_URL}/initiate_pipeline"
 
         response = requests.get(
             SMARTFIELDS_API,

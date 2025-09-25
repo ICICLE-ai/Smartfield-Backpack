@@ -59,6 +59,7 @@ services:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs:rw
       - ./mission:/app/mission:rw
+      - ./AnafiMedia:/app/AnafiMedia:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /proc/net:/host/proc/net:ro
       - /dev/video0:/dev/video0:rw

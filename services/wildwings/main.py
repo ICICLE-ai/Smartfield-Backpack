@@ -172,22 +172,59 @@ async def stop_mission():
     global mission_thread, stop_mission_flag, current_process, is_running
 
     if not mission_thread or not mission_thread.is_alive():
-        logger.error("No mission currently running")
-        raise HTTPException(status_code=400, detail="No mission currently running")
-
-    try:
-        stop_mission_flag.set()
-        if current_process:
-            current_process.terminate()
-        logger.info("Mission stop signal sent")
+        logger.info("No mission currently running")
         return {
             "status": "success",
-            "message": "Mission stop requested"
+            "message": "No mission currently running",
+            "was_running": False
+        }
+
+    try:
+        # Set stop flag
+        stop_mission_flag.set()
+        logger.info("Stop mission flag set")
+
+        # Terminate the process if it exists
+        if current_process:
+            logger.info("Terminating current process")
+            current_process.terminate()
+
+            # Wait a bit for graceful termination
+            try:
+                current_process.wait(timeout=5)
+                logger.info("Process terminated gracefully")
+            except subprocess.TimeoutExpired:
+                logger.warning("Process didn't terminate gracefully, forcing kill")
+                current_process.kill()
+                current_process.wait()
+
+        # Wait for mission thread to finish
+        if mission_thread and mission_thread.is_alive():
+            logger.info("Waiting for mission thread to finish")
+            mission_thread.join(timeout=10)
+            if mission_thread.is_alive():
+                logger.warning("Mission thread didn't finish within timeout")
+
+        # Update state
+        is_running = False
+
+        logger.info("Mission stopped successfully")
+        return {
+            "status": "success",
+            "message": "Mission stopped successfully",
+            "was_running": True
         }
 
     except Exception as e:
         logger.error(f"Failed to stop mission: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop mission: {str(e)}")
+        # Still try to clean up state even if stopping failed
+        is_running = False
+        stop_mission_flag.set()
+        return {
+            "status": "error",
+            "message": f"Error stopping mission: {str(e)}",
+            "was_running": True
+        }
 
 @app.get("/mission_status")
 async def mission_status():

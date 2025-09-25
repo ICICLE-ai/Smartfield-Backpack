@@ -1,6 +1,5 @@
 import logging
 import toml
-import json
 import time
 import requests
 import threading
@@ -82,7 +81,7 @@ async def wait_for_completion(services: Dict[str, str], service_name: str, missi
         return False
     
     start_time = time.time()
-    timeout = 180  # 3 minutes timeout
+    timeout = 180
     
     while True:
         try:
@@ -202,7 +201,7 @@ async def root():
     logger.info("Root endpoint accessed")
     return {"message": "SmartFields Service", "status": "running"}
 
-@app.get("/initiate_process")
+@app.get("/initiate_pipeline")
 async def initiate_process(
     lat: float = Query(..., description="Latitude coordinate"), 
     lon: float = Query(..., description="Longitude coordinate"), 
@@ -281,56 +280,50 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
-@app.post("/start_mission")
-async def start_mission():
-    logger.info("Start mission endpoint accessed")
-    raise HTTPException(
-        status_code=400, 
-        detail="Use /initiate_process endpoint with lat, lon, and camid parameters"
-    )
+@app.post("/stop_pipeline")
+async def stop_pipeline():
+    global pipeline_running
+    logger.info("Stop pipeline endpoint accessed")
 
-@app.post("/stop_mission")
-async def stop_mission():
-    logger.info("Stop mission endpoint accessed")
-    
-    try:
-        with open('target_ips.json', 'r') as f:
-            services = json.load(f)
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Service configuration not found")
-    
+    if not pipeline_running:
+        logger.info("Pipeline is not currently running")
+        return {
+            "message": "Pipeline is not currently running",
+            "status": "already_stopped",
+            "pipeline_running": False
+        }
+
+    # Stop the pipeline flag first
+    pipeline_running = False
+    logger.info("Pipeline stop flag set")
+
+    # Get services and attempt to stop them
+    services = get_services()
     stopped_services = []
     failed_services = []
-    
-    for service_name, ip in services.items():
+
+    for service_name, service_url in services.items():
         try:
-            url = f"http://{ip}/stop_mission"
+            url = f"http://{service_url}/stop_mission"
             response = requests.post(url, timeout=10)
             if response.status_code == 200:
                 stopped_services.append(service_name)
                 logger.info(f'Successfully stopped {service_name}')
             else:
                 failed_services.append(service_name)
-                logger.error(f'Failed to stop {service_name}: {response.status_code}')
+                logger.warning(f'Failed to stop {service_name}: {response.status_code}')
         except Exception as e:
             failed_services.append(service_name)
-            logger.error(f'Error stopping {service_name}: {e}')
-    
-    global pipeline_running
-    pipeline_running = False
-    
-    if stopped_services:
-        return {
-            "message": f"Stopped missions: {', '.join(stopped_services)}",
-            "stopped_services": stopped_services,
-            "failed_services": failed_services,
-            "status": "success"
-        }
-    else:
-        raise HTTPException(
-            status_code=500, 
-            detail="No missions were stopped"
-        )
+            logger.warning(f'Error stopping {service_name}: {e}')
+
+    # Always return success if pipeline flag was set, even if service calls failed
+    return {
+        "message": f"Pipeline stopped. Services contacted: {', '.join(stopped_services + failed_services)}",
+        "stopped_services": stopped_services,
+        "failed_services": failed_services,
+        "pipeline_running": False,
+        "status": "stopped"
+    }
 
 if __name__ == "__main__":
     uvicorn.run(
