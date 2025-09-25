@@ -203,10 +203,8 @@ try:
     drone.camera.media.stop_recording()
     
     # Download media
-    media_dir = os.path.join(output_directory, 'media')
-    os.makedirs(media_dir, exist_ok=True)
-    logger.info(f"Downloading media to {media_dir}")
-    drone.camera.media.download_last_media(path=media_dir)
+    logger.info(f"Downloading media")
+    drone.camera.media.download_last_media()
     
     # Uncomment for actual flight
     # logger.info("Landing drone")
