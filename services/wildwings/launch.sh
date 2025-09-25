@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Initialize Conda for the shell
-source ~/miniconda3/etc/profile.d/conda.sh
-
-# Activate the Conda environment
-conda activate wildwing
-
 # Generate a timestamp
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
@@ -21,6 +15,13 @@ mkdir -p "logs"
 
 # Log start of mission
 echo "$(date): Starting WildWings mission with timestamp $timestamp" | tee -a logs/wildwings.txt
+
+if [ -z "$DISPLAY" ]; then
+    export DISPLAY=:99
+    Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+    sleep 1
+fi
+
 
 # Run the Python script with live output to wildwings.txt
 python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.txt

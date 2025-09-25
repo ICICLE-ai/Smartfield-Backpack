@@ -52,24 +52,45 @@ services:
     container_name: wildwings
     ports:
       - "2199:2199"
+      - "44444:44444/udp"
+      - "55004:55004/udp"
+      - "55005:55005/udp"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs:rw
       - ./mission:/app/mission:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /proc/net:/host/proc/net:ro
+      - /dev/video0:/dev/video0:rw
+      - /dev/video1:/dev/video1:rw
+      - /dev/bus/usb:/dev/bus/usb:rw
+      - /sys:/sys:ro
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - DISPLAY=${DISPLAY:-:0}
-      - CONDA_DEFAULT_ENV=wildwing
+      - XAUTHORITY=/tmp/.Xauthority
+      - OLYMPE_LOG_LEVEL=WARNING
+      - QT_X11_NO_MITSHM=1
     devices:
       - /dev/dri:/dev/dri
+      - /dev/net/tun:/dev/net/tun
     networks:
       - smartfield-network
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - NET_RAW
+      - CAP_SYS_NICE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=0
     restart: unless-stopped
     privileged: true
+    stdin_open: true
+    tty: true        
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:2199/"]
+      test: ["CMD", "python3", "-c", "import olympe; print('OK')"]
       interval: 30s
       timeout: 10s
       retries: 3

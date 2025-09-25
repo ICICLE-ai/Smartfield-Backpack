@@ -3,28 +3,28 @@ host = "0.0.0.0"
 port = 2177
 cors_origin = "*"
 debug = false
-logfile_path = "logs/openpasslite.txt"
+logfile_path = "logs/openpasslite.log"
 
 [smartfields]
 host = "0.0.0.0"
 port = 2188
 cors_origin = "*"
 debug = false
-logfile_path = "logs/smartfields.txt"
+logfile_path = "logs/smartfields.log"
 
 [wildwings]
 host = "0.0.0.0"
 port = 2199
 cors_origin = "*"
 debug = false
-logfile_path = "logs/wildwings.txt"
+logfile_path = "logs/wildwings.log"
 
 [subscriber]
 client_id = "local_subscriber"
 qos = 1
 broker = "localhost"
 port = 1883
-logfile_path = "logs/mqtt_subscriber.txt" 
+logfile_path = "logs/mqtt_subscriber.log" 
 smartfields_url = "http://smartfields:2188/initiate_process"
 
 # MQTT topic mapping for each Pi

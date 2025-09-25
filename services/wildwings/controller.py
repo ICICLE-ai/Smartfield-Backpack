@@ -11,37 +11,64 @@ import time
 import csv 
 import os
 import datetime
+import logging
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/wildwings.txt'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-# To run, first fly the drone an area with direct sight of the zebras using the FreeFlight6 app
-# Then run the program
+# Check if running in Docker
+IN_DOCKER = os.environ.get('IN_DOCKER', 'false').lower() == 'true' or os.path.exists('/.dockerenv')
 
 # User-defined mission parameters
-# 5 minutes is 300 seconds
-DURATION = 20 # duration in seconds
+DURATION = 20  # duration in seconds
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
-    print("Usage: python controller.py <output_directory>")
+    logger.error("Usage: python controller.py <output_directory>")
     sys.exit(1)
 
 output_directory = sys.argv[1]
+logger.info(f"Output directory: {output_directory}")
+
+# Ensure output directory exists with proper permissions
+try:
+    os.makedirs(output_directory, exist_ok=True)
+    os.chmod(output_directory, 0o755)
+except Exception as e:
+    logger.error(f"Failed to create output directory: {e}")
+    sys.exit(1)
 
 # Define CSV file path to store telemetry data
 csv_file_path = os.path.join(output_directory, 'telemetry_log.csv')
 
 # Create images subdirectory
 images_dir = os.path.join(output_directory, 'images')
-os.makedirs(images_dir, exist_ok=True)
+try:
+    os.makedirs(images_dir, exist_ok=True)
+    os.chmod(images_dir, 0o755)
+    logger.info(f"Created images directory: {images_dir}")
+except Exception as e:
+    logger.error(f"Failed to create images directory: {e}")
 
 # Ensure the CSV file has a header row
 if not os.path.exists(csv_file_path):
-    with open(csv_file_path, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["timestamp", "x", "y", "z", "move_x", "move_y", "move_z", "frame"])
+    try:
+        with open(csv_file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["timestamp", "x", "y", "z", "move_x", "move_y", "move_z", "frame"])
+        os.chmod(csv_file_path, 0o644)
+        logger.info("Created telemetry CSV file")
+    except Exception as e:
+        logger.error(f"Failed to create CSV file: {e}")
 
-
-# Runs what to do on every yuv_frame of the stream, modify it as needed
 class Tracker:
     def __init__(self, drone, model):
         self.drone = drone
@@ -50,27 +77,30 @@ class Tracker:
         self.frame = None
         self.FPS = 1/60
         self.FPS_MS = int(self.FPS * 1000)
+        logger.info("Tracker initialized")
 
     def track(self):
+        logger.info("Starting tracking loop")
+        frame_count = 0
+        
         while self.media.running:
+            yuv_frame = None
             try:
                 yuv_frame = self.media.frame_queue.get(timeout=0.1)
                 self.media.frame_counter += 1
+                frame_count += 1
 
-                if (self.media.frame_counter % 40) == 0: # note: adjust this number to change how often the drone moves (every 20 frames in this case)
-                    # the VideoFrame.info() dictionary contains some useful information
-                    # such as the video resolution
+                if (self.media.frame_counter % 40) == 0:
+                    logger.info(f"Processing frame {self.media.frame_counter}")
+                    
+                    # Get frame info
                     info = yuv_frame.info()
-
-                    height, width = (  # noqa
+                    height, width = (
                         info["raw"]["frame"]["info"]["height"],
                         info["raw"]["frame"]["info"]["width"],
                     )
 
-                    # yuv_frame.vmeta() returns a dictionary that contains additional
-                    # metadata from the drone (GPS coordinates, battery percentage, ...)
-
-                    # convert pdraw YUV flag to OpenCV YUV flag
+                    # Convert YUV to BGR
                     cv2_cvt_color_flag = {
                         olympe.VDEF_I420: cv2.COLOR_YUV2BGR_I420,
                         olympe.VDEF_NV12: cv2.COLOR_YUV2BGR_NV12,
@@ -78,80 +108,118 @@ class Tracker:
 
                     cv2frame = cv2.cvtColor(yuv_frame.as_ndarray(), cv2_cvt_color_flag)
 
-                    x_direction, y_direction, z_direction = navigation.get_next_action(cv2frame, self.model, images_dir, self.media.frame_counter)  # KEY LINE
-                    #self.update_frame(cv2.imread('result.jpg'))
+                    # Get navigation action
+                    x_direction, y_direction, z_direction = navigation.get_next_action(
+                        cv2frame, self.model, images_dir, self.media.frame_counter
+                    )
 
-                    # save telemetry
-                    telemetry = drone.get_drone_coordinates()
+                    # Get and save telemetry
+                    try:
+                        telemetry = drone.get_drone_coordinates()
+                        timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+                        
+                        with open(csv_file_path, mode='a', newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow([timestamp, telemetry[0], telemetry[1], telemetry[2], 
+                                           x_direction, y_direction, z_direction, self.media.frame_counter])
+                        
+                        logger.debug(f"Telemetry saved for frame {self.media.frame_counter}")
+                    except Exception as e:
+                        logger.error(f"Failed to save telemetry: {e}")
 
-                     # Convert time.time() to datetime object
-                    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-                    # Append telemetry data to CSV file
-                    with open(csv_file_path, mode='a', newline='') as file:
-                        writer = csv.writer(file)
-                        writer.writerow([timestamp, telemetry[0], telemetry[1], telemetry[2], x_direction, y_direction, z_direction, self.media.frame_counter])
-
+                    # Uncomment to enable drone movement
                     # self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
 
-                # cv2.imwrite(os.path.join(self.download_dir, "test{}.jpg".format(self.frame_counter)), cv2frame)
+                if yuv_frame is not None:
+                    yuv_frame.unref()
+                    
             except queue.Empty:
                 continue
+            except Exception as e:
+                logger.error(f"Error processing frame: {e}")
+                if yuv_frame is not None:
+                    yuv_frame.unref()
+                continue
 
-        # You should process your frames here and release (unref) them when you're done.
-        # Don't hold a reference on your frames for too long to avoid memory leaks and/or memory
-        # pool exhaustion.
-        yuv_frame.unref()
+        logger.info(f"Tracking loop ended. Processed {frame_count} frames")
 
-            
-
-
-# Setup a parrot anafi drone, connected through a controller, without a specific download directory
-sp = SoftwarePilot()
-model = YOLO('yolov5su')
-
-# Connect to the drone
-drone = sp.setup_drone("parrot_anafi", 1, "None")
-drone.connect()
-
-# Take off
-# drone.piloting.takeoff()
-
-# wait for drone to stabilize
-time.sleep(5)
-
-# Create a tracker object
-tracker = Tracker(drone, model)
-
-# set up recording
-drone.camera.media.setup_recording()
-drone.camera.media.start_recording()
-
-# wait for drone to stabilize
-time.sleep(5)
-
-# Start the stream
-drone.camera.media.setup_stream(yuv_frame_processing=tracker.track)
-drone.camera.media.start_stream() 
-
-# set window properties
-cv2.namedWindow('tracking', cv2.WINDOW_KEEPRATIO)
-cv2.resizeWindow('tracking', 500, 500)
-cv2.moveWindow('tracking', 0, 0)
-
-# set track duration in seconds
-time.sleep(DURATION)
-drone.camera.media.stop_stream()
-
-# stop recording
-drone.camera.media.stop_recording()
-
-# Download media to mission directory
-media_dir = os.path.join(output_directory, 'media')
-os.makedirs(media_dir, exist_ok=True)
-drone.camera.media.download_last_media(path=media_dir)
-
-# Land the drone
-# drone.piloting.land()
-
-# Disconnect the droneß
-drone.disconnect()
+# Main execution
+try:
+    # Setup drone
+    logger.info("Setting up drone connection")
+    sp = SoftwarePilot()
+    
+    # Load YOLO model
+    logger.info("Loading YOLO model")
+    model = YOLO('yolov5su')
+    
+    # Connect to drone
+    drone = sp.setup_drone("parrot_anafi", 1, "None")
+    drone.connect()
+    logger.info("Drone connected")
+    
+    # Uncomment for actual flight
+    # logger.info("Taking off")
+    # drone.piloting.takeoff()
+    
+    # Wait for stabilization
+    time.sleep(5)
+    
+    # Create tracker
+    tracker = Tracker(drone, model)
+    
+    # Setup and start recording
+    logger.info("Starting recording")
+    drone.camera.media.setup_recording()
+    drone.camera.media.start_recording()
+    
+    time.sleep(5)
+    
+    # Start stream with tracking
+    logger.info("Starting video stream")
+    drone.camera.media.setup_stream(yuv_frame_processing=tracker.track)
+    drone.camera.media.start_stream()
+    
+    # Setup OpenCV window (only if not in Docker or if display is available)
+    if not IN_DOCKER or os.environ.get('DISPLAY'):
+        try:
+            cv2.namedWindow('tracking', cv2.WINDOW_KEEPRATIO)
+            cv2.resizeWindow('tracking', 500, 500)
+            cv2.moveWindow('tracking', 0, 0)
+            logger.info("OpenCV window created")
+        except Exception as e:
+            logger.warning(f"Could not create OpenCV window (running headless): {e}")
+    
+    # Run for specified duration
+    logger.info(f"Running mission for {DURATION} seconds")
+    time.sleep(DURATION)
+    
+    # Stop stream
+    logger.info("Stopping stream")
+    drone.camera.media.stop_stream()
+    
+    # Stop recording
+    logger.info("Stopping recording")
+    drone.camera.media.stop_recording()
+    
+    # Download media
+    media_dir = os.path.join(output_directory, 'media')
+    os.makedirs(media_dir, exist_ok=True)
+    logger.info(f"Downloading media to {media_dir}")
+    drone.camera.media.download_last_media(path=media_dir)
+    
+    # Uncomment for actual flight
+    # logger.info("Landing drone")
+    # drone.piloting.land()
+    
+    # Disconnect
+    logger.info("Disconnecting drone")
+    drone.disconnect()
+    
+    logger.info("Mission completed successfully")
+    
+except Exception as e:
+    logger.error(f"Mission failed with error: {e}", exc_info=True)
+    sys.exit(1)
+finally:
+    cv2.destroyAllWindows()
