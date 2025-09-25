@@ -64,7 +64,7 @@ def on_message(client, userdata, msg):
         SMARTFIELD_URL = get_services()["smartfield"]
         SMARTFIELDS_API = f"http://{SMARTFIELD_URL}/initiate_pipeline"
 
-        response = requests.get(
+        response = requests.post(
             SMARTFIELDS_API,
             params={"lat": lat, "lon": lon, "camid": camid},
             timeout=10

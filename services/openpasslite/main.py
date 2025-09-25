@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 from pathlib import Path
+import asyncio
 
 # Load configuration
 config_path = Path("/app/config.toml")
@@ -28,33 +29,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger("openpasslite")
 
-# Global mission state
+# Global mission state with thread safety
+mission_lock = threading.Lock()
 mission_thread = None
 stop_mission_flag = threading.Event()
+current_drone = None
 
 def run_mission_background(mission_name: str, lat: Optional[str], long: Optional[str]):
     """Execute mission in background thread"""
-    global stop_mission_flag
+    global stop_mission_flag, current_drone, mission_lock
+    drone = None
     try:
         if stop_mission_flag.is_set():
             logger.info(f"Mission {mission_name} stopped before execution")
             return
-        
+
         logger.info(f"Starting mission: {mission_name}")
         mission_module = importlib.import_module(f"mission.{mission_name}.script")
 
+        # Create and store drone connection with proper resource management
         drone = AnafiController(connection_type=1)
-        
+        with mission_lock:
+            current_drone = drone
+
         if hasattr(mission_module, 'run'):
             logger.info(f"Executing mission {mission_name}")
             mission_module.run(drone, lat, long)
             logger.info(f"Mission {mission_name} completed")
         else:
             raise Exception(f"'run(drone)' not defined in mission.{mission_name}")
-            
+
     except Exception as e:
         logger.error(f"Mission {mission_name} failed: {str(e)}")
     finally:
+        # Proper cleanup and resource management
+        with mission_lock:
+            if drone:
+                try:
+                    drone.disconnect()
+                    logger.info(f"Drone connection closed for mission {mission_name}")
+                except Exception as disconnect_error:
+                    logger.error(f"Error disconnecting drone: {str(disconnect_error)}")
+            current_drone = None
         stop_mission_flag.clear()
         logger.info(f"Mission {mission_name} thread finished")
 
@@ -63,11 +79,25 @@ async def lifespan(app: FastAPI):
     logger.info("OpenPassLite service starting up")
     yield
     logger.info("OpenPassLite service shutting down")
-    global mission_thread, stop_mission_flag
+    global mission_thread, stop_mission_flag, current_drone, mission_lock
+
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            logger.info("Stopping running mission during shutdown")
+            stop_mission_flag.set()
+
+        # Force disconnect drone if still connected
+        if current_drone:
+            try:
+                current_drone.disconnect()
+                logger.info("Forced drone disconnection during shutdown")
+            except Exception as e:
+                logger.error(f"Error during forced drone disconnection: {str(e)}")
+
     if mission_thread and mission_thread.is_alive():
-        logger.info("Stopping running mission during shutdown")
-        stop_mission_flag.set()
         mission_thread.join(timeout=5.0)
+        if mission_thread.is_alive():
+            logger.error("Mission thread did not stop gracefully within timeout")
 
 app = FastAPI(
     title="OpenPassLite Service",
@@ -92,77 +122,90 @@ async def root():
 @app.post("/start_mission")
 async def start_mission(name: str, lat: Optional[str] = None, long: Optional[str] = None):
     logger.info(f"Start mission endpoint accessed - Mission: {name}")
-    
-    global mission_thread, stop_mission_flag
-    
+
+    global mission_thread, stop_mission_flag, mission_lock
+
     if not name:
         logger.error("Mission name is required")
         raise HTTPException(status_code=400, detail="Mission name is required")
-    
-    if mission_thread and mission_thread.is_alive():
-        logger.error("Mission already running")
-        raise HTTPException(status_code=400, detail="Mission already running")
-    
-    try:
-        # Clear any previous stop flag and start new mission
-        stop_mission_flag.clear()
-        mission_thread = threading.Thread(
-            target=run_mission_background, 
-            args=(name, lat, long),
-            name=f"Mission-{name}"
-        )
-        mission_thread.start()
-        
-        logger.info(f"Mission {name} started successfully")
-        return {
-            "status": "success", 
-            "message": f"Mission '{name}' started",
-            "mission_name": name,
-            "coordinates": {"lat": lat, "long": long} if lat and long else None
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to start mission {name}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start mission: {str(e)}")
+
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            logger.error("Mission already running")
+            raise HTTPException(status_code=400, detail="Mission already running")
+
+        try:
+            # Clear any previous stop flag and start new mission
+            stop_mission_flag.clear()
+            mission_thread = threading.Thread(
+                target=run_mission_background,
+                args=(name, lat, long),
+                name=f"Mission-{name}"
+            )
+            mission_thread.start()
+
+            logger.info(f"Mission {name} started successfully")
+            return {
+                "status": "success",
+                "message": f"Mission '{name}' started",
+                "mission_name": name,
+                "coordinates": {"lat": lat, "long": long} if lat and long else None
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to start mission {name}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to start mission: {str(e)}")
 
 @app.post("/stop_mission")
 async def stop_mission():
     logger.info("Stop mission endpoint accessed")
-    
-    global mission_thread, stop_mission_flag
-    
-    if not mission_thread or not mission_thread.is_alive():
-        logger.error("No mission currently running")
-        raise HTTPException(status_code=400, detail="No mission currently running")
-    
-    try:
-        stop_mission_flag.set()
-        logger.info("Mission stop signal sent")
-        return {
-            "status": "success", 
-            "message": "Mission stop requested"
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to stop mission: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop mission: {str(e)}")
+
+    global mission_thread, stop_mission_flag, current_drone, mission_lock
+
+    with mission_lock:
+        if not mission_thread or not mission_thread.is_alive():
+            logger.error("No mission currently running")
+            raise HTTPException(status_code=400, detail="No mission currently running")
+
+        try:
+            stop_mission_flag.set()
+
+            # Also attempt to disconnect drone for immediate stop
+            if current_drone:
+                try:
+                    current_drone.disconnect()
+                    logger.info("Drone disconnected to stop mission")
+                except Exception as disconnect_error:
+                    logger.warning(f"Could not disconnect drone during stop: {str(disconnect_error)}")
+
+            logger.info("Mission stop signal sent")
+            return {
+                "status": "success",
+                "message": "Mission stop requested"
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to stop mission: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to stop mission: {str(e)}")
 
 @app.get("/mission_status")
 async def mission_status():
-    global mission_thread, stop_mission_flag
-    
-    if mission_thread and mission_thread.is_alive():
-        status = "running"
-        if stop_mission_flag.is_set():
-            status = "stopping"
-    else:
-        status = "idle"
-    
-    return {
-        "status": status,
-        "thread_alive": mission_thread.is_alive() if mission_thread else False,
-        "stop_requested": stop_mission_flag.is_set()
-    }
+    global mission_thread, stop_mission_flag, mission_lock
+
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            status = "running"
+            if stop_mission_flag.is_set():
+                status = "stopping"
+        else:
+            status = "idle"
+
+        return {
+            "status": status,
+            "thread_alive": mission_thread.is_alive() if mission_thread else False,
+            "stop_requested": stop_mission_flag.is_set(),
+            "drone_connected": current_drone is not None
+        }
 
 @app.get("/logs")
 async def get_logs(lines: int = 100):
