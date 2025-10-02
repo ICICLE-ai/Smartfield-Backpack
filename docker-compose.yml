@@ -150,12 +150,26 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/main-dashboard.json
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       - smartfield-network
     depends_on:
       - loki
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"  # RTSP
+      - "8888:8888"  # HLS
+      - "8889:8889"  # WebRTC
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+
 
 volumes:
   loki-data:
