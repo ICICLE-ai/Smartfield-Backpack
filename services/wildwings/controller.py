@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/wildwings.txt'),
+        logging.FileHandler('logs/wildwings.log'),
         logging.StreamHandler()
     ]
 )

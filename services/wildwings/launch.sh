@@ -14,7 +14,7 @@ mkdir -p "$output_dir"
 mkdir -p "logs"
 
 # Log start of mission
-echo "$(date): Starting WildWings mission with timestamp $timestamp" | tee -a logs/wildwings.txt
+echo "$(date): Starting WildWings mission with timestamp $timestamp" | tee -a logs/wildwings.log
 
 if [ -z "$DISPLAY" ]; then
     export DISPLAY=:99
@@ -23,7 +23,7 @@ if [ -z "$DISPLAY" ]; then
 fi
 
 
-# Run the Python script with live output to wildwings.txt
+# Run the Python script with live output to wildwings.log
 python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.log
 
 # Log completion

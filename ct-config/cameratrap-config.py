@@ -19,7 +19,7 @@ print(response.json())
 # ===== Step 3 =====
 # payload = {
 #     "gpu": "false",
-#     "ckn_mqtt_broker": "192.168.157.160",
+#     "ckn_mqtt_broker": "192.168.0.122",
 #     "ct_version": "test",
 #     "mode": "demo",
 #     "model": "yolov5nu_ep120_bs32_lr0.001_0cfb1c03.pt",
