@@ -25,11 +25,10 @@ def run(drone, lat=None, long=None):
         print("✓ Takeoff completed")
 
         print("=== STABILIZING AFTER TAKEOFF ===")
-        time.sleep(5)
 
         print("=== CHANGING THE DRONE GIMBAL MOTION ===")
         drone.camera.controls.set_orientation(0, -90, 0, wait=True)
-        time.sleep(5)
+        time.sleep(3)
 
         print(f"=== NAVIGATING TO TARGET ===")
         print(f"Target: Lat={lat_float:.6f}, Lon={long_float:.6f}, Alt=13m")
@@ -39,7 +38,7 @@ def run(drone, lat=None, long=None):
                 lat=lat_float,
                 lon=long_float,
                 alt=13,
-                orientation_mode="NONE",
+                orientation_mode="TO_TARGET",
                 heading=0,
                 wait=True
             )
@@ -53,7 +52,7 @@ def run(drone, lat=None, long=None):
                 lat=lat_float,
                 lon=long_float,
                 alt=13,
-                orientation_mode="NONE",
+                orientation_mode="TO_TARGET",
                 heading=0,
                 wait=False
             )

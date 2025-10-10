@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 IN_DOCKER = os.environ.get('IN_DOCKER', 'false').lower() == 'true' or os.path.exists('/.dockerenv')
 
 # User-defined mission parameters
-DURATION = 60  # duration in seconds
+DURATION = 25  # duration in seconds
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
@@ -146,7 +146,7 @@ class Tracker:
 
 # Main execution
 try:
-    time.sleep(20)
+    time.sleep(3)
     # Setup drone
     logger.info("Setting up drone connection")
     sp = SoftwarePilot()
@@ -163,7 +163,7 @@ try:
     logger.info("=" * 60)
 
     # Wait for stabilization
-    time.sleep(5)
+    time.sleep(3)
 
     # Create tracker
     tracker = Tracker(drone, model)

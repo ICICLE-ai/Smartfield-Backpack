@@ -193,7 +193,7 @@ async def execute_pipeline() -> bool:
         flow = [
             ("openpasslite", "/start_mission", "LTT"),
             ("wildwings", "/start_mission", None),
-            ("openpasslite", "/start_mission", "RTT")
+            ("openpasslite", "/start_mission", "RTB")
         ]
 
         for idx, (service, endpoint, mission_name) in enumerate(flow):

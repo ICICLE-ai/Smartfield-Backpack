@@ -3,8 +3,8 @@ import time
 controller_ip = 'http://icicle-ct1.local:8080'
 
 # ===== Step 1 =====
-# response = requests.get(f'{controller_ip}/health')
-# print(response.json())
+response = requests.get(f'{controller_ip}/health')
+print(response.json())
 
 
 # ===== Step 2 =====
@@ -35,11 +35,11 @@ controller_ip = 'http://icicle-ct1.local:8080'
 
 
 # ===== Step 4 =====
-response = requests.post(f'{controller_ip}/run')
-print(response.json())
-time.sleep(70)
-response = requests.get(f'{controller_ip}/health')
-print(response.json())
+# response = requests.post(f'{controller_ip}/run')
+# print(response.json())
+# time.sleep(70)
+# response = requests.get(f'{controller_ip}/health')
+# print(response.json())
 
 
 # ===== Step 5 =====
